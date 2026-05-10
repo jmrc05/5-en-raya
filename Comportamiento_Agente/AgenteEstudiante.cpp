@@ -103,7 +103,7 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
     if (ganador == oponente) return Resultado::DERROTA;
     if (ganador == -1)       return Resultado::EMPATE;
 
-    auto sucesores = tablero.getSucesoresConMovimientos();
+    auto sucesores = tablero.getSucesores();
     if (sucesores.empty())   return Resultado::EMPATE;
 
     bool hayEmpate = false;
@@ -112,9 +112,10 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
     if (tablero.getJugadorTurno() == id) {
         // Nodo MAX: buscamos la mejor opción para nosotros
         // Prioridad: VICTORIA > EMPATE > DERROTA
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             Resultado r = Status(hijo, movHijo);
+            std::pair<int,int> mov = SacarMovimiento(tablero, hijo);
             if (r == Resultado::VICTORIA) {
                 Mov = mov;
                 return Resultado::VICTORIA;
@@ -125,13 +126,13 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
             }
         }
         if (hayEmpate) { Mov = movEmpate; return Resultado::EMPATE; }
-        Mov = sucesores[0].second;
+        Mov = SacarMovimiento(tablero, sucesores[0]);
         return Resultado::DERROTA;
 
     } else {
         // Nodo MIN: el rival elige la peor opción para nosotros
         // Prioridad del rival: DERROTA nuestra > EMPATE > VICTORIA nuestra
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             Resultado r = Status(hijo, movHijo);
             if (r == Resultado::DERROTA) return Resultado::DERROTA;
@@ -169,33 +170,38 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
     if (ganador != 0 || profundidad == prof_Max)
         return heuristica(tablero);
 
-    auto sucesores = tablero.getSucesoresConMovimientos();
+    auto sucesores = tablero.getSucesores();
     if (sucesores.empty())
         return heuristica(tablero);
 
     if (tablero.getJugadorTurno() == id) {
         // Nodo MAX: elegimos el hijo con mayor valor
         double mejor = MenosInfinito;
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             double val = minimax(hijo, profundidad + 1, prof_Max, movHijo);
             if (val > mejor) {
                 mejor = val;
-                if (profundidad == 0) Mov = mov; // guardamos jugada solo en la raíz
+                if (profundidad == 0) Mov = SacarMovimiento(tablero, hijo);
             }
+            // Garantizamos que al menos el primer movimiento queda guardado
+            if (profundidad == 0 && Mov.first == -1)
+                Mov = SacarMovimiento(tablero, hijo);
         }
         return mejor;
 
     } else {
         // Nodo MIN: elegimos el hijo con menor valor
         double mejor = MasInfinito;
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             double val = minimax(hijo, profundidad + 1, prof_Max, movHijo);
             if (val < mejor) {
                 mejor = val;
-                if (profundidad == 0) Mov = mov;
+                if (profundidad == 0) Mov = SacarMovimiento(tablero, hijo);
             }
+            if (profundidad == 0 && Mov.first == -1)
+                Mov = SacarMovimiento(tablero, hijo);
         }
         return mejor;
     }
@@ -208,14 +214,12 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
  * @return La jugada elegida por el algoritmo de búsqueda.
  */
 std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
-    std::pair<int,int> Mov;
+    std::pair<int,int> Mov = {-1, -1};  // inicialización explícita
 
     double valor = alfaBeta(tablero, 0, profundidadMax, MenosInfinito, MasInfinito, Mov);
     std::cout << "Valor Minimax: " << valor << "\tJugada: (" << Mov.first << ", " << Mov.second << ")\n";
     return Mov;
 }
-
-
 
 
 /**
@@ -245,7 +249,7 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
     if (ganador != 0 || profundidad == prof_Max)
         return heuristica(tablero);
 
-    auto sucesores = tablero.getSucesoresConMovimientos();
+    auto sucesores = tablero.getSucesores();
     if (sucesores.empty())
         return heuristica(tablero);
 
@@ -253,13 +257,16 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
         // Nodo MAX: maximizamos y actualizamos alfa
         // Poda BETA: si alfa >= beta, el nodo MIN padre nunca elegiría este camino
         double mejor = MenosInfinito;
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
             if (val > mejor) {
                 mejor = val;
-                if (profundidad == 0) Mov = mov; // guardamos jugada solo en la raíz
+                if (profundidad == 0) Mov = SacarMovimiento(tablero, hijo);
             }
+            // Garantizamos que al menos el primer movimiento queda guardado
+            if (profundidad == 0 && Mov.first == -1)
+                Mov = SacarMovimiento(tablero, hijo);
             alfa = std::max(alfa, mejor);
             if (alfa >= beta) break; // PODA BETA
         }
@@ -269,7 +276,7 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
         // Nodo MIN: minimizamos y actualizamos beta
         // Poda ALFA: si beta <= alfa, el nodo MAX abuelo ya tiene algo mejor
         double mejor = MasInfinito;
-        for (auto& [hijo, mov] : sucesores) {
+        for (const Tablero& hijo : sucesores) {
             std::pair<int,int> movHijo;
             double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
             if (val < mejor) {
@@ -304,7 +311,6 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
     int n = tablero.getNParaGanar();
     int oponente = (id == 1) ? 2 : 1;
     double score_positivo = 0;
-
     double score_negativo = 0;
 
     for (int f=0; f< tablero.getFilas(); f++ ){
@@ -320,8 +326,6 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
             }
         }
     }
-
-   
     return score_positivo - score_negativo;
 }
 

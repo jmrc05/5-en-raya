@@ -95,8 +95,51 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
     nodosVisitados++;
     /* ============== Empieza a partir de aquí tu implementación  =============== */
 
+    int oponente = (id == 1) ? 2 : 1;
+    int ganador  = tablero.comprobarGanador();
 
-    return Resultado::EMPATE;
+    // Caso base: ya hay un ganador o empate técnico (tablero lleno)
+    if (ganador == id)       return Resultado::VICTORIA;
+    if (ganador == oponente) return Resultado::DERROTA;
+    if (ganador == -1)       return Resultado::EMPATE;
+
+    auto sucesores = tablero.getSucesoresConMovimientos();
+    if (sucesores.empty())   return Resultado::EMPATE;
+
+    bool hayEmpate = false;
+    std::pair<int,int> movEmpate = {-1, -1};
+
+    if (tablero.getJugadorTurno() == id) {
+        // Nodo MAX: buscamos la mejor opción para nosotros
+        // Prioridad: VICTORIA > EMPATE > DERROTA
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            Resultado r = Status(hijo, movHijo);
+            if (r == Resultado::VICTORIA) {
+                Mov = mov;
+                return Resultado::VICTORIA;
+            }
+            if (r == Resultado::EMPATE && !hayEmpate) {
+                hayEmpate = true;
+                movEmpate = mov;
+            }
+        }
+        if (hayEmpate) { Mov = movEmpate; return Resultado::EMPATE; }
+        Mov = sucesores[0].second;
+        return Resultado::DERROTA;
+
+    } else {
+        // Nodo MIN: el rival elige la peor opción para nosotros
+        // Prioridad del rival: DERROTA nuestra > EMPATE > VICTORIA nuestra
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            Resultado r = Status(hijo, movHijo);
+            if (r == Resultado::DERROTA) return Resultado::DERROTA;
+            if (r == Resultado::EMPATE)  hayEmpate = true;
+        }
+        if (hayEmpate) return Resultado::EMPATE;
+        return Resultado::VICTORIA;
+    }
 }
 
 
@@ -120,8 +163,42 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
     }
     /* ============== Empieza a partir de aquí tu implementación  =============== */
 
+    int ganador = tablero.comprobarGanador();
 
-    return 0;
+    // Caso base: victoria/derrota, profundidad máxima o sin movimientos
+    if (ganador != 0 || profundidad == prof_Max)
+        return heuristica(tablero);
+
+    auto sucesores = tablero.getSucesoresConMovimientos();
+    if (sucesores.empty())
+        return heuristica(tablero);
+
+    if (tablero.getJugadorTurno() == id) {
+        // Nodo MAX: elegimos el hijo con mayor valor
+        double mejor = MenosInfinito;
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            double val = minimax(hijo, profundidad + 1, prof_Max, movHijo);
+            if (val > mejor) {
+                mejor = val;
+                if (profundidad == 0) Mov = mov; // guardamos jugada solo en la raíz
+            }
+        }
+        return mejor;
+
+    } else {
+        // Nodo MIN: elegimos el hijo con menor valor
+        double mejor = MasInfinito;
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            double val = minimax(hijo, profundidad + 1, prof_Max, movHijo);
+            if (val < mejor) {
+                mejor = val;
+                if (profundidad == 0) Mov = mov;
+            }
+        }
+        return mejor;
+    }
 }
 
 
@@ -162,8 +239,47 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
     }
     /* ============== Empieza a partir de aquí tu implementación  =============== */
 
+    int ganador = tablero.comprobarGanador();
 
-    return 0;
+    // Caso base: victoria/derrota, profundidad máxima o sin movimientos
+    if (ganador != 0 || profundidad == prof_Max)
+        return heuristica(tablero);
+
+    auto sucesores = tablero.getSucesoresConMovimientos();
+    if (sucesores.empty())
+        return heuristica(tablero);
+
+    if (tablero.getJugadorTurno() == id) {
+        // Nodo MAX: maximizamos y actualizamos alfa
+        // Poda BETA: si alfa >= beta, el nodo MIN padre nunca elegiría este camino
+        double mejor = MenosInfinito;
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
+            if (val > mejor) {
+                mejor = val;
+                if (profundidad == 0) Mov = mov; // guardamos jugada solo en la raíz
+            }
+            alfa = std::max(alfa, mejor);
+            if (alfa >= beta) break; // PODA BETA
+        }
+        return mejor;
+
+    } else {
+        // Nodo MIN: minimizamos y actualizamos beta
+        // Poda ALFA: si beta <= alfa, el nodo MAX abuelo ya tiene algo mejor
+        double mejor = MasInfinito;
+        for (auto& [hijo, mov] : sucesores) {
+            std::pair<int,int> movHijo;
+            double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
+            if (val < mejor) {
+                mejor = val;
+            }
+            beta = std::min(beta, mejor);
+            if (beta <= alfa) break; // PODA ALFA
+        }
+        return mejor;
+    }
 }
 
 /**
@@ -210,13 +326,196 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 }
 
 
+// ============================================================
+// Función auxiliar: evalúa una ventana de n celdas consecutivas
+//
+// Si hay fichas de ambos jugadores → ventana bloqueada → 0
+// Si solo hay fichas propias:
+//   n-1 fichas (4 de 5) → 100000  (amenaza inmediata de victoria)
+//   n-2 fichas (3 de 5) → 1000
+//   n-3 fichas (2 de 5) → 10
+//   1 ficha              → 1
+// Si solo hay fichas rivales: mismos valores pero negativos
+// ============================================================
+static double evaluarVentana(int mias, int rival, int n) {
+    if (mias > 0 && rival > 0) return 0.0;
+
+    if (mias > 0) {
+        if (mias == n - 1) return  100000.0;
+        if (mias == n - 2) return    1000.0;
+        if (mias == n - 3) return      10.0;
+        return 1.0;
+    }
+    if (rival > 0) {
+        if (rival == n - 1) return -100000.0;
+        if (rival == n - 2) return   -1000.0;
+        if (rival == n - 3) return     -10.0;
+        return -1.0;
+    }
+    return 0.0;
+}
+
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
-    //A implementar por el estudiante
-return 0;
+    int oponente = (id == 1) ? 2 : 1;
+    int ganador  = tablero.comprobarGanador();
+
+    // Criterio 1: victoria / derrota / empate técnico
+    if (ganador == id)       return  GANAR;
+    if (ganador == oponente) return  PERDER;
+    if (ganador == -1)       return  0.0;
+
+    int filas = tablero.getFilas();
+    int cols  = tablero.getColumnas();
+    int n     = tablero.getNParaGanar(); // 5 en modo competición
+
+    double score = 0.0;
+
+    // Criterio 2: alineaciones parciales en las 4 direcciones
+    // Horizontal (0,1), Vertical (1,0), Diagonal \ (1,1), Diagonal / (1,-1)
+    const int dfs[] = { 0,  1,  1,  1};
+    const int dcs[] = { 1,  0,  1, -1};
+
+    for (int d = 0; d < 4; d++) {
+        int df = dfs[d], dc = dcs[d];
+        for (int f = 0; f < filas; f++) {
+            for (int c = 0; c < cols; c++) {
+                int ef = f + df * (n - 1);
+                int ec = c + dc * (n - 1);
+                // Descartamos ventanas que se salgan del tablero
+                if (ef < 0 || ef >= filas || ec < 0 || ec >= cols) continue;
+
+                int mias = 0, rival = 0;
+                for (int k = 0; k < n; k++) {
+                    int celda = tablero.getCelda(f + df * k, c + dc * k);
+                    if      (celda == id)       mias++;
+                    else if (celda == oponente) rival++;
+                }
+                score += evaluarVentana(mias, rival, n);
+            }
+        }
+    }
+
+    // Criterio 3: control del centro
+    // Las casillas centrales tienen más conexiones posibles
+    int centro_f = filas / 2;
+    int centro_c = cols  / 2;
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            int celda = tablero.getCelda(f, c);
+            if (celda == 0) continue;
+            int dist  = std::abs(f - centro_f) + std::abs(c - centro_c);
+            double bonus = (filas + cols - dist) * 0.5;
+            if (celda == id) score += bonus;
+            else             score -= bonus;
+        }
+    }
+
+    // Criterio 4: casillas especiales
+    // Roja: penalizamos ficha propia (fue convertida al rival)
+    // Verde: bonificamos si la controlamos (da movimiento extra)
+    // Amarilla: penalizamos fichas propias expuestas en su fila/columna
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            TipoCelda tipo = tablero.getTipoCelda(f, c);
+            if (tipo == TipoCelda::NORMAL) continue;
+            int celda = tablero.getCelda(f, c);
+
+            if (tipo == TipoCelda::ROJO) {
+                if      (celda == id)       score -= 300.0;
+                else if (celda == oponente) score += 300.0;
+            }
+            else if (tipo == TipoCelda::VERDE) {
+                if      (celda == id)       score +=  80.0;
+                else if (celda == oponente) score -=  80.0;
+            }
+            else if (tipo == TipoCelda::AMARILLO) {
+                for (int ff = 0; ff < filas; ff++) {
+                    int v = tablero.getCelda(ff, c);
+                    if      (v == id)       score -= 20.0;
+                    else if (v == oponente) score += 20.0;
+                }
+                for (int cc = 0; cc < cols; cc++) {
+                    int v = tablero.getCelda(f, cc);
+                    if      (v == id)       score -= 20.0;
+                    else if (v == oponente) score += 20.0;
+                }
+            }
+        }
+    }
+
+    return score;
 }
 
 double AgenteEstudiante::heuristica2(const Tablero& tablero) {
-    //A implementar por el estudiante
-return 0;
-}
+    int oponente = (id == 1) ? 2 : 1;
+    int ganador  = tablero.comprobarGanador();
 
+    // Criterio 1: victoria / derrota / empate técnico
+    if (ganador == id)       return  GANAR;
+    if (ganador == oponente) return  PERDER;
+    if (ganador == -1)       return  0.0;
+
+    int filas = tablero.getFilas();
+    int cols  = tablero.getColumnas();
+    int n     = tablero.getNParaGanar();
+
+    double score = 0.0;
+
+    // Criterio 2: igual que heuristica1 pero con mayor peso defensivo
+    // Las amenazas del rival valen 1.5x más → el agente bloquea más
+    const int dfs[] = { 0,  1,  1,  1};
+    const int dcs[] = { 1,  0,  1, -1};
+
+    for (int d = 0; d < 4; d++) {
+        int df = dfs[d], dc = dcs[d];
+        for (int f = 0; f < filas; f++) {
+            for (int c = 0; c < cols; c++) {
+                int ef = f + df * (n - 1);
+                int ec = c + dc * (n - 1);
+                if (ef < 0 || ef >= filas || ec < 0 || ec >= cols) continue;
+
+                int mias = 0, rival = 0;
+                for (int k = 0; k < n; k++) {
+                    int celda = tablero.getCelda(f + df * k, c + dc * k);
+                    if      (celda == id)       mias++;
+                    else if (celda == oponente) rival++;
+                }
+                if (mias > 0 && rival > 0) continue;
+                if      (mias  > 0) score += evaluarVentana(mias,  0, n);
+                else if (rival > 0) score += evaluarVentana(0, rival, n) * 1.5;
+            }
+        }
+    }
+
+    // Criterio 3: control del centro con peso reducido (0.3 vs 0.5)
+    int centro_f = filas / 2;
+    int centro_c = cols  / 2;
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            int celda = tablero.getCelda(f, c);
+            if (celda == 0) continue;
+            int dist  = std::abs(f - centro_f) + std::abs(c - centro_c);
+            double bonus = (filas + cols - dist) * 0.3;
+            if (celda == id) score += bonus;
+            else             score -= bonus;
+        }
+    }
+
+    // Criterio 4: casillas especiales
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            TipoCelda tipo = tablero.getTipoCelda(f, c);
+            if (tipo == TipoCelda::NORMAL) continue;
+            int celda = tablero.getCelda(f, c);
+            if (tipo == TipoCelda::ROJO) {
+                if      (celda == id)       score -= 300.0;
+                else if (celda == oponente) score += 300.0;
+            } else if (tipo == TipoCelda::VERDE) {
+                if      (celda == id)       score +=  80.0;
+                else if (celda == oponente) score -=  80.0;
+            }
+        }
+    }
+
+    return score;
+}

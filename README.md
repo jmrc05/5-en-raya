@@ -1,94 +1,148 @@
-# Práctica 3 de *Inteligencia Artificial*, curso 2025/2026
+# 🎮 5-en-Raya Táctico — Agente Inteligente con Poda Alfa-Beta
 
-## Prerrequisitos
+> Práctica 3 · Inteligencia Artificial · Universidad de Granada (UGR) · Curso 2025-2026
 
-### Crear una cuenta en [GitHub](https://github.com/). 
-Para ello, puedes usar tu correo personal, el de *@correo.ugr.es* o el de *@go.ugr.es*.
+---
 
+## 📋 Descripción
 
-### 1. Añadir tu clave SSH a GitHub
-Hay varias maneras de conectarte desde tu ordenador a GitHub. Si utilizas un navegador, usarás tu usuario y contraseña. Desde el terminal, lo más cómodo es utilizar una clave SSH. Puedes crear una nueva si no tienes, o reutilizar una ya existente. Tienes toda la información para realizar la configuración en: 
-[Conectar a GitHub con SSH](https://docs.github.com/es/authentication/connecting-to-github-with-ssh)
+Implementación de un **agente inteligente** capaz de jugar al **5-en-Raya Táctico** en un tablero 9×9 con reglas asimétricas y casillas especiales, desarrollada como parte de la asignatura de Inteligencia Artificial del Grado en Ingeniería Informática de la UGR.
 
+El agente utiliza técnicas de **Búsqueda con Adversario** para tomar decisiones óptimas en tiempo real, compitiendo contra agentes pre-entrenados de distintos niveles de dificultad (*ninjas*).
 
-### 2. Crear tu copia personal del repositorio de la asignatura
-Cada estudiante debe tener su propia copia del repositorio para poder trabajar sobre ella de forma privada. En adelante, a tu copia la llamaremos *origin*, y al repositorio original de la asignatura lo llamaremos *upstream*.
+---
 
-Para garantizar que tu trabajo no sea público, utilizaremos el proceso de **importación de repositorio** de GitHub.
+## 🧠 Algoritmos Implementados
 
-Para realizar la copia, una vez que tengas creada tu cuenta en GitHub, haz click en <https://github.com/new/import> y rellena tal y como se ve en la imagen de abajo. El repositorio que quieres importar es `https://github.com/ugr-ccia-IA/practica3`. ¡Asegúrate de que tu repositorio es privado!
+| Algoritmo | Descripción |
+|-----------|-------------|
+| **Status** | Búsqueda exhaustiva para resolución exacta de tableros pequeños |
+| **MiniMax** | Exploración del árbol de juego con profundidad limitada |
+| **Poda Alfa-Beta** | Optimización de MiniMax eliminando ramas no prometedoras |
+| **Heurística propia** | Función de evaluación diseñada para el 5-en-Raya Táctico |
 
-![Importar repositorio practica3](doc/img/import_new_repo.png)
+---
 
+## 🕹️ El Juego: 5-en-Raya Táctico (Modo Competición 9×9)
 
-### 3. Clonar tu repositorio en tu máquina
-Una vez hecho el paso anterior, tendrás tu repositorio personal de la práctica3 en GitHub; puedes descargarlo a tu ordenador usando:
-`git clone git@github.com:TU_USUARIO_GITHUB/practica3.git` (si no has configurado tu clave SSH, esto no funcionará).
+A diferencia del tres en raya clásico, esta variante introduce mecánicas estratégicas avanzadas:
 
+- **Objetivo:** Alinear 5 fichas consecutivas (horizontal, vertical o diagonal)
+- **Turno asimétrico (1-2-2-2):** El J1 coloca 1 ficha en el primer turno; a partir de ahí, cada jugador coloca hasta 2 fichas por turno
+- **Regla de Trinidad:** Solo se puede colocar en casillas donde `(fila + columna) % 3 == faseActual % 3`
+- **Regla de Adyacencia:** Toda pieza debe colocarse adyacente a una ya existente
 
-### 4. Modificar el código y guardar los cambios
-Es el momento de empezar a modificar ficheros. Abre el fichero README.md (este fichero), ve al final y añade una línea que diga "Esto lo puse yo."
-Una vez lo hayas modificado, guarda el fichero, y ejecuta los siguientes comandos en el terminal estando dentro de la carpeta `practica3`:
+### Casillas Especiales
 
-```
-git add . 
-git commit -m "Modificando README.md"
-git push origin main 
-```
+| Casilla | Efecto |
+|---------|--------|
+| 🟢 **Verde (Mística)** | Otorga +1 movimiento extra al turno |
+| 🔴 **Roja (Sabotaje)** | La ficha colocada se convierte en del rival |
+| 🟡 **Amarilla (Bomba)** | Elimina todas las fichas de su fila y columna |
 
-Los tres comandos anteriores le indican a git que 1) queremos guardar una nueva versión con todos los ficheros modificados de la carpeta, 2) que haga esa versión y le ponga el comentario "Cambiando el enlace del botón", y 3) que envíe esta nueva versión a la copia de nuestro repositorio alojada en GitHub.
+---
 
-Este proceso es el que debes repetir cada vez que vayas avanzando en la implementación de la práctica: add, commit, push.
+## ⚙️ Instalación y Ejecución
 
+### Requisitos
+- Ubuntu / Linux
+- OpenGL, CMake, g++
 
-
-### 5. Enlazar tu repositorio personal con el de la asignatura
-Aunque tu repositorio y el de la asignatura (recuerda que los conocemos por *origin* y *upstream* respectivamente) sean independientes, nos va a interesar que estén enlazados. De esta forma, podrás aplicar fácilmente sobre tu repositorio (*origin*) cualquier actualización que los profesores realicemos en *upstream*. Para enlazarlos, ejecuta lo siguiente dentro de la carpeta de tu repositorio:
-
-`git remote add upstream git@github.com:ugr-ccia-IA/practica3.git`
-
-
-### Actualizar tu repositorio con cambios realizados en el de la asignatura
-Una vez tengas los repositiorios enlazados, lo único que debes hacer para aplicar posibles cambios en el repositorio de la asignatura en tu repositorio (cambios de *upstream* en *origin*) es: `git pull upstream main`
-
-Hacer esto no sobreescribirá tus avances en la implementación de la práctica, puesto que tú no deberías haber modificado ninguna parte del código diferente a la que se indica en el guión.
-
-Si quieres que esos cambios también se guarden en github, a continuación ejecuta: `git push origin main`
-
-
-> Si quieres saber más sobre Git y GitHub, en Internet existen multitud de recursos, incluidos videos y tutoriales. Para realizar esta práctica sólo necesitas lo básico (hacer commits), pero hay muchas cosas más que se pueden hacer con estas herramientas (uso de ramas, gestión de conflictos, etc.) 
-El propio GitHub pone a tu disposición un [breve curso](https://classroom.github.com/a/W33pQ3pa) (en inglés) para aprender lo básico.
-
-
-## Realización de la práctica
-El guión (disponible en [PRADO](https://pradogrado2526.ugr.es/)) contiene toda la información sobre en qué consiste la práctica3. Leelo con atención.
-
-Junto a ellos, también tienes a tu disposición una pequeña presentación de resumen, y un tutorial. Debes revisarlos pues continen los primeros pasos a realizar.
-
-
-### Instalación local (Linux)
-
-Una vez clonado tu repositorio personal en tu ordenador, puedes preparar y compilar el código ejecutando el script de instalación:
-
+### Instalación
 ```bash
+git clone https://github.com/jmrc05/Practica-3.git
+cd Practica-3
 ./install.sh
 ```
 
-Este script instalará las dependencias necesarias y realizará la primera compilación. Si realizas cambios en el código posteriormente, solo necesitas ejecutar:
-
+### Compilar tras modificaciones
 ```bash
-make -j$(nproc)
+make -j
 ```
 
-> [!NOTE]
-> Por defecto, el software se compila en modo **Release** para garantizar el máximo rendimiento de la IA. Si necesitas depurar errores complejos y quieres compilar en modo **Debug**, ejecuta:
-> `cmake . -DCMAKE_BUILD_TYPE=Debug && make clean && make -j$(nproc)`
+### Ejemplos de ejecución
 
-A continuación, puedes lanzar el software con hebras con `./n_en_raya`, o sin hebras con `./n_en_rayaSH`. Para una partida rápida que juega un humano contra otro, usa `./n_en_raya -p1 humano -p2 humano`.
+```bash
+# Agente inteligente (heurística 1) vs Ninja nivel 1
+./n_en_raya -p1 inteligente -id1 1 -p2 ninja1 -nogui
 
+# Comparativa de heurísticas
+./n_en_raya -p1 inteligente -id1 1 -p2 inteligente -id2 0 -nogui
 
+# Partida con interfaz gráfica
+./n_en_raya -p1 inteligente -id1 1 -p2 ninja2 -f 9 -c 9 -n 5
 
+# Resolución completa de tablero 3x3 (Status)
+./n_en_raya -p1 status -f 3 -c 3 -n 3 -nogui
+```
 
-## Más información
-Hemos creado un [fichero con preguntas frecuentes](./FAQ.md) que han ido apareciendo en las distintas sesiones de prácticas.
+---
 
+## 📁 Estructura del Proyecto
+
+```
+Practica-3/
+├── src/
+│   └── AgenteEstudiante.cpp   # ← Implementación del agente (fichero principal)
+├── include/
+│   └── AgenteEstudiante.hpp   # ← Cabecera del agente
+├── n_en_raya                  # Ejecutable con interfaz gráfica
+├── n_en_rayaSH                # Ejecutable sin hebras (más compatible)
+└── install.sh                 # Script de instalación
+```
+
+---
+
+## 🏆 Resultados en Competición
+
+El agente compite contra 4 niveles de ninjas pre-entrenados. Resultados obtenidos:
+
+| Rival | Resultado |
+|-------|-----------|
+| ninja1 | ✅ Victoria |
+| ninja2 | ✅ Victoria |
+| ninja3 | 🔄 En progreso |
+| ninja4 | 🔄 En progreso |
+
+---
+
+## 🔬 Diseño de la Heurística
+
+La función de evaluación (`heuristica1`) considera los siguientes criterios, ordenados por importancia:
+
+1. **Victoria/Derrota inmediata** → ±∞
+2. **Alineaciones parciales** → evaluación de ventanas de 5 casillas en las 4 direcciones
+3. **Casillas especiales** → bonus por verdes, penalización por rojas/amarillas
+4. **Control del centro** → bonus por fichas en posiciones centrales del tablero
+5. **Amenazas del rival** → evaluación defensiva con signo negativo
+
+---
+
+## 🛠️ Tecnologías
+
+![C++](https://img.shields.io/badge/C++-17-00599C?style=flat&logo=cplusplus&logoColor=white)
+![OpenGL](https://img.shields.io/badge/OpenGL-GLUT-5586A4?style=flat&logo=opengl)
+![CMake](https://img.shields.io/badge/CMake-3.10+-064F8C?style=flat&logo=cmake)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-Linux-E95420?style=flat&logo=ubuntu&logoColor=white)
+
+---
+
+## 📚 Contexto Académico
+
+- **Asignatura:** Inteligencia Artificial
+- **Titulación:** Grado en Ingeniería Informática / Telecomunicación
+- **Universidad:** Universidad de Granada (UGR)
+- **Departamento:** Ciencias de la Computación e Inteligencia Artificial (DECSAI)
+- **Curso:** 2025-2026
+
+---
+
+## 👤 Autor
+
+**Juana Maria Rascon Contreras** — [@jmrc05](https://github.com/jmrc05)
+
+*Estudiante de Ingeniería Informática · UGR*
+
+---
+
+> ⚠️ **Nota:** Este repositorio es privado y corresponde a trabajo académico individual. El código es de elaboración propia siguiendo las directrices de la asignatura.

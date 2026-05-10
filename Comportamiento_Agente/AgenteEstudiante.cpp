@@ -214,11 +214,40 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
  * @return La jugada elegida por el algoritmo de búsqueda.
  */
 std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
-    std::pair<int,int> Mov = {-1, -1};  // inicialización explícita
+    std::pair<int,int> mejorMov = {-1, -1};
 
-    double valor = alfaBeta(tablero, 0, profundidadMax, MenosInfinito, MasInfinito, Mov);
-    std::cout << "Valor Minimax: " << valor << "\tJugada: (" << Mov.first << ", " << Mov.second << ")\n";
-    return Mov;
+    // 1. PARCHE DE SEGURIDAD: Inicializamos con el primer movimiento legal posible.
+    // Así, si el tiempo se agota instantáneamente (por lag), jamás devolveremos {-1, -1}.
+    auto sucesores = tablero.getSucesores();
+    if (!sucesores.empty()) {
+        mejorMov = SacarMovimiento(tablero, sucesores[0]);
+    } else {
+        return mejorMov; // El juego ya ha terminado
+    }
+
+    // 2. PROFUNDIDAD ITERATIVA
+    for (int prof = 1; prof <= profundidadMax; ++prof) {
+        std::pair<int,int> movActual = {-1, -1};
+        
+        // Buscamos a la profundidad actual
+        double valor = alfaBeta(tablero, 0, prof, MenosInfinito, MasInfinito, movActual);
+        
+        // Si la búsqueda fue interrumpida por falta de tiempo, la descartamos
+        // y nos quedamos con el mejorMov de la iteración anterior (que sí terminó).
+        if (abortarBanda) {
+            std::cout << "--> Búsqueda cortada en profundidad " << prof << " por falta de tiempo.\n";
+            break; 
+        }
+        
+        // Si dio tiempo a completar esta profundidad, actualizamos nuestro mejor movimiento seguro
+        if (movActual.first != -1) {
+            mejorMov = movActual;
+            std::cout << "Profundidad " << prof << " completada. Valor Minimax: " << valor 
+                      << "\tJugada: (" << mejorMov.first << ", " << mejorMov.second << ")\n";
+        }
+    }
+
+    return mejorMov;
 }
 
 

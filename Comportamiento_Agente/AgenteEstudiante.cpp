@@ -380,9 +380,9 @@ static double evaluarVentana(int mias, int rival, int n) {
         return 1.0;
     }
     if (rival > 0) {
-        if (rival == n - 1) return -100000.0;
-        if (rival == n - 2) return   -1000.0;
-        if (rival == n - 3) return     -10.0;
+        if (rival == n - 1) return -200000.0;
+        if (rival == n - 2) return   -3000.0;
+        if (rival == n - 3) return     -30.0;
         return -1.0;
     }
     return 0.0;
@@ -449,19 +449,19 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     // Amarilla: penalizamos fichas propias expuestas en su fila/columna
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
-            TipoCelda tipo = tablero.getTipoCelda(f, c);
-            if (tipo == TipoCelda::NORMAL) continue;
+            Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
+            if (tipo == Tablero::TipoCelda::NORMAL) continue;
             int celda = tablero.getCelda(f, c);
 
-            if (tipo == TipoCelda::ROJO) {
+            if (tipo == Tablero::TipoCelda::ROJO) {
                 if      (celda == id)       score -= 300.0;
                 else if (celda == oponente) score += 300.0;
             }
-            else if (tipo == TipoCelda::VERDE) {
+            else if (tipo == Tablero::TipoCelda::VERDE) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
             }
-            else if (tipo == TipoCelda::AMARILLO) {
+            else if (tipo == Tablero::TipoCelda::AMARILLO) {
                 for (int ff = 0; ff < filas; ff++) {
                     int v = tablero.getCelda(ff, c);
                     if      (v == id)       score -= 20.0;
@@ -537,13 +537,13 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
     // Criterio 4: casillas especiales
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
-            TipoCelda tipo = tablero.getTipoCelda(f, c);
-            if (tipo == TipoCelda::NORMAL) continue;
+            Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
+            if (tipo == Tablero::TipoCelda::NORMAL) continue;
             int celda = tablero.getCelda(f, c);
-            if (tipo == TipoCelda::ROJO) {
+            if (tipo == Tablero::TipoCelda::ROJO) {
                 if      (celda == id)       score -= 300.0;
                 else if (celda == oponente) score += 300.0;
-            } else if (tipo == TipoCelda::VERDE) {
+            } else if (tipo == Tablero::TipoCelda::VERDE) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
             }

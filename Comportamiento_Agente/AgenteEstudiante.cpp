@@ -26,52 +26,47 @@ std::pair<int, int> AgenteEstudiante::think(const Tablero& tablero) {
     case ModoJuego::ALEATORIO:
         return JuegaAleatorio(tablero);
         break;
-    
     case ModoJuego::STATUS:
         Status(tablero, mejor);
         return mejor;
-        break;    
-
+        break;
     case ModoJuego::MINIMAX:
         minimax(tablero, 0, profundidadMax, mejor);
         return mejor;
-        break; 
-
+        break;
     case ModoJuego::INTELIGENTE:
-        return JuegaInteligente(tablero);   
+        return JuegaInteligente(tablero);
         break;
     }
-        
     return {-1, -1};
 }
 
 /**
  * @brief Compara dos tableros para identificar cuál ha sido el movimiento realizado.
  */
-std::pair<int, int> SacarMovimiento(const Tablero& padre, const Tablero &hijo){
-    for(int f=0; f<padre.getFilas(); ++f)
-        for(int c=0; c<padre.getColumnas(); ++c)
-            if (padre.getCelda(f,c) == 0 && hijo.getCelda(f,c) != 0) 
+std::pair<int, int> SacarMovimiento(const Tablero& padre, const Tablero& hijo) {
+    for (int f = 0; f < padre.getFilas(); ++f)
+        for (int c = 0; c < padre.getColumnas(); ++c)
+            if (padre.getCelda(f, c) == 0 && hijo.getCelda(f, c) != 0)
                 return {f, c};
     return {-1, -1};
 }
 
 /**
- * @brief Implementa un agente que juega de forma totalmente aleatoria.
+ * @brief Agente aleatorio.
  */
 std::pair<int, int> AgenteEstudiante::JuegaAleatorio(const Tablero& tablero) {
     auto sucesores = tablero.getSucesores();
     if (sucesores.empty()) return {-1, -1};
     int elegido = rand() % sucesores.size();
-    std::pair<int,int> Mov = SacarMovimiento(tablero, sucesores[elegido]);
-    return Mov;
+    return SacarMovimiento(tablero, sucesores[elegido]);
 }
 
 /**
- * @brief Algoritmo Status — resolución completa sin límite de profundidad.
+ * @brief Status — resolución completa sin límite de profundidad.
  * Solo viable en tableros pequeños (3x3, 4x4).
  */
-AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std::pair<int,int> &Mov) {
+AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero& tablero, std::pair<int,int>& Mov) {
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
     nodosVisitados++;
     /* ============== Empieza a partir de aquí tu implementación  =============== */
@@ -84,7 +79,7 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
     if (ganador == -1)       return Resultado::EMPATE;
 
     auto sucesores = tablero.getSucesores();
-    if (sucesores.empty())   return Resultado::EMPATE;
+    if (sucesores.empty()) return Resultado::EMPATE;
 
     bool hayEmpate = false;
     std::pair<int,int> movEmpate = {-1, -1};
@@ -115,9 +110,9 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
 }
 
 /**
- * @brief Implementación del algoritmo Minimax clásico (profundidad competición: 4).
+ * @brief Minimax clásico sin poda (profundidad competición: 4).
  */
-double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int prof_Max, std::pair<int,int> &Mov) {
+double AgenteEstudiante::minimax(const Tablero& tablero, int profundidad, int prof_Max, std::pair<int,int>& Mov) {
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
     nodosVisitados++;
     if (abortarBanda) return 0;
@@ -127,8 +122,14 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
     }
     /* ============== Empieza a partir de aquí tu implementación  =============== */
 
-    int ganador = tablero.comprobarGanador();
-    if (ganador != 0 || profundidad == prof_Max) return heuristica(tablero);
+    int oponente = (id == 1) ? 2 : 1;
+    int ganador  = tablero.comprobarGanador();
+
+    // Nodos terminales con penalización de profundidad (fix efecto horizonte)
+    if (ganador == id)       return GANAR - profundidad;
+    if (ganador == oponente) return PERDER + profundidad;
+    if (ganador == -1)       return 0.0;
+    if (profundidad == prof_Max) return heuristica(tablero);
 
     auto sucesores = tablero.getSucesores();
     if (sucesores.empty()) return heuristica(tablero);
@@ -161,14 +162,19 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
 }
 
 /**
- * @brief Punto de entrada para el juego inteligente con profundidad iterativa.
- * La profundidad iterativa garantiza que siempre tenemos un movimiento válido
- * aunque se agote el tiempo, usando el mejor resultado de la última profundidad completa.
+ * @brief JuegaInteligente con Profundidad Iterativa y Ordenación entre iteraciones.
+ *
+ * Mejora 3 — Move ordering entre iteraciones:
+ * Guardamos en mejorMovimientoH el mejor movimiento de la iteración d-1.
+ * alfaBeta lo colocará como primer candidato en la iteración d.
+ * Esto garantiza que la raíz explore primero el movimiento más prometedor,
+ * maximizando los cortes alfa-beta desde el principio.
  */
 std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
     std::pair<int,int> mejorMov = {-1, -1};
+    mejorMovimientoH = {-1, -1};  // Reseteamos el hint al inicio de cada turno
 
-    // Inicializamos con el primer movimiento legal como seguridad ante timeout
+    // Seguridad: inicializamos con el primer movimiento legal
     auto sucesores = tablero.getSucesores();
     if (!sucesores.empty()) {
         mejorMov = SacarMovimiento(tablero, sucesores[0]);
@@ -176,18 +182,21 @@ std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
         return mejorMov;
     }
 
-    // Profundidad iterativa: de 1 hasta profundidadMax
+    // Profundidad iterativa de 1 hasta profundidadMax
     for (int prof = 1; prof <= profundidadMax; ++prof) {
         std::pair<int,int> movActual = {-1, -1};
+
+        // mejorMovimientoH lleva el hint de la iteración anterior a alfaBeta
         double valor = alfaBeta(tablero, 0, prof, MenosInfinito, MasInfinito, movActual);
 
         if (abortarBanda) {
             std::cout << "--> Búsqueda cortada en profundidad " << prof << " por falta de tiempo.\n";
-            break; 
+            break;
         }
         if (movActual.first != -1) {
-            mejorMov = movActual;
-            std::cout << "Profundidad " << prof << " completada. Valor Minimax: " << valor 
+            mejorMov         = movActual;
+            mejorMovimientoH = movActual;  // hint para la siguiente iteración
+            std::cout << "Profundidad " << prof << " completada. Valor Minimax: " << valor
                       << "\tJugada: (" << mejorMov.first << ", " << mejorMov.second << ")\n";
         }
     }
@@ -195,18 +204,23 @@ std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
 }
 
 /**
- * @brief Implementación del algoritmo Minimax con Poda Alfa-Beta (profundidad competición: 7).
+ * @brief Alfa-Beta con tres mejoras:
  *
- * Mejoras sobre Minimax puro:
- * 1. Poda alfa-beta: elimina ramas que no pueden mejorar el resultado conocido.
- *    - alfa = lo mejor que MAX puede garantizarse (empieza en -inf)
- *    - beta = lo mejor que MIN puede garantizarse (empieza en +inf)
- *    - Poda BETA (en MAX): si valor >= beta, el MIN padre no elegiría aquí → cortamos
- *    - Poda ALFA (en MIN): si valor <= alfa, el MAX abuelo ya tiene algo mejor → cortamos
- * 2. Ordenación de sucesores: exploramos primero los movimientos más prometedores
- *    usando heuristicaPrueba (rápida) para ordenar. Esto maximiza las podas.
+ * Mejora 1 — Heurística 1-2-2-2:
+ *   Los pesos de evaluarVentana reflejan que cada jugador pone hasta 2 fichas
+ *   por turno. Con 3 en línea el rival puede ganar EN EL PRÓXIMO TURNO → -80000.
+ *
+ * Mejora 2 — Efecto Horizonte:
+ *   Los nodos terminales devuelven GANAR-profundidad o PERDER+profundidad.
+ *   Así el agente prefiere victorias rápidas y alarga las derrotas.
+ *
+ * Mejora 3 — Move Ordering entre iteraciones:
+ *   En profundidad 0, el mejor movimiento de la iteración anterior
+ *   (almacenado en mejorMovimientoH) se coloca primero en la lista de sucesores.
+ *   Combinado con la ordenación por heuristicaPrueba, esto maximiza los cortes.
  */
-double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int prof_Max, double alfa, double beta, std::pair<int,int> &Mov) {
+double AgenteEstudiante::alfaBeta(const Tablero& tablero, int profundidad, int prof_Max,
+                                   double alfa, double beta, std::pair<int,int>& Mov) {
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
     nodosVisitados++;
     if (abortarBanda) return 0;
@@ -216,34 +230,57 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
     }
     /* ============== Empieza a partir de aquí tu implementación  =============== */
 
-    int ganador = tablero.comprobarGanador();
-    if (ganador != 0 || profundidad == prof_Max) return heuristica(tablero);
+    int oponente = (id == 1) ? 2 : 1;
+    int ganador  = tablero.comprobarGanador();
+
+    // Mejora 2: nodos terminales con penalización de profundidad.
+    // GANAR - profundidad: victorias más rápidas valen más.
+    // PERDER + profundidad: derrotas más lentas valen más (el rival puede cometer errores).
+    if (ganador == id)       return GANAR - profundidad;
+    if (ganador == oponente) return PERDER + profundidad;
+    if (ganador == -1)       return 0.0;
+    if (profundidad == prof_Max) return heuristica(tablero);
 
     auto sucesores = tablero.getSucesores();
     if (sucesores.empty()) return heuristica(tablero);
 
-    // ORDENACIÓN DE SUCESORES: evaluamos cada hijo con heuristicaPrueba (O(n) rápida)
-    // y los ordenamos de mejor a peor antes de explorar. Esto hace que alfa-beta pode
-    // muchas más ramas, permitiendo llegar a mayor profundidad en el mismo tiempo.
     bool esMax = (tablero.getJugadorTurno() == id);
-    std::vector<std::pair<double, int>> puntuaciones; // (score, índice)
-    puntuaciones.reserve(sucesores.size());
-    for (int i = 0; i < (int)sucesores.size(); i++) {
-        puntuaciones.push_back({heuristicaPrueba(sucesores[i]), i});
-    }
-    // MAX ordena de mayor a menor (mejor para nosotros primero)
-    // MIN ordena de menor a mayor (peor para nosotros primero)
+
+    // --- Ordenación de sucesores ---
+    // Construimos un vector de (puntuacion_rapida, indice) y lo ordenamos.
+    // MAX: de mayor a menor (mejor para nosotros primero).
+    // MIN: de menor a mayor (peor para nosotros primero).
+    std::vector<std::pair<double, int>> ranking;
+    ranking.reserve(sucesores.size());
+    for (int i = 0; i < (int)sucesores.size(); i++)
+        ranking.push_back({heuristicaPrueba(sucesores[i]), i});
+
     if (esMax)
-        std::sort(puntuaciones.begin(), puntuaciones.end(),
+        std::sort(ranking.begin(), ranking.end(),
                   [](const std::pair<double,int>& a, const std::pair<double,int>& b){ return a.first > b.first; });
     else
-        std::sort(puntuaciones.begin(), puntuaciones.end(),
+        std::sort(ranking.begin(), ranking.end(),
                   [](const std::pair<double,int>& a, const std::pair<double,int>& b){ return a.first < b.first; });
 
+    // Mejora 3: en la raíz, colocamos primero el mejor movimiento de la iteración anterior.
+    // Esto garantiza que alfa-beta empiece por la rama más prometedora,
+    // generando cortes desde el inicio y explorando más profundo en el mismo tiempo.
+    if (profundidad == 0 && mejorMovimientoH.first != -1) {
+        for (int i = 1; i < (int)ranking.size(); i++) {
+            std::pair<int,int> mov = SacarMovimiento(tablero, sucesores[ranking[i].second]);
+            if (mov == mejorMovimientoH) {
+                // Rotamos para que este índice quede en la posición 0
+                std::rotate(ranking.begin(), ranking.begin() + i, ranking.begin() + i + 1);
+                break;
+            }
+        }
+    }
+
     if (esMax) {
-        // Nodo MAX: maximizamos y actualizamos alfa
+        // Nodo MAX: maximizamos y actualizamos alfa.
+        // Poda BETA: si alfa >= beta, el nodo MIN padre nunca elegiría este camino.
         double mejor = MenosInfinito;
-        for (auto& [score, idx] : puntuaciones) {
+        for (auto& [sc, idx] : ranking) {
             const Tablero& hijo = sucesores[idx];
             std::pair<int,int> movHijo;
             double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
@@ -257,9 +294,10 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
         }
         return mejor;
     } else {
-        // Nodo MIN: minimizamos y actualizamos beta
+        // Nodo MIN: minimizamos y actualizamos beta.
+        // Poda ALFA: si beta <= alfa, el nodo MAX abuelo ya tiene algo mejor.
         double mejor = MasInfinito;
-        for (auto& [score, idx] : puntuaciones) {
+        for (auto& [sc, idx] : ranking) {
             const Tablero& hijo = sucesores[idx];
             std::pair<int,int> movHijo;
             double val = alfaBeta(hijo, profundidad + 1, prof_Max, alfa, beta, movHijo);
@@ -277,28 +315,28 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
 double AgenteEstudiante::heuristica(const Tablero& tablero) {
     switch(numHeuristica) {
         case 0: return heuristicaPrueba(tablero); break;
-        case 1: return heuristica1(tablero); break;
-        case 2: return heuristica2(tablero); break;
+        case 1: return heuristica1(tablero);      break;
+        case 2: return heuristica2(tablero);      break;
         default: return heuristica1(tablero);
     }
 }
 
 /**
  * @brief heuristicaPrueba — NO MODIFICAR.
- * Evalúa centralidad de fichas. Usada también para la ordenación de sucesores
- * en alfaBeta por ser O(n) y muy rápida.
+ * Evalúa proximidad de fichas al centro. También usada para ordenar sucesores
+ * en alfaBeta por ser O(81) y muy rápida.
  */
 double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
     int n = tablero.getNParaGanar();
     int oponente = (id == 1) ? 2 : 1;
-    double score_positivo = 0;
-    double score_negativo = 0;
-    for (int f=0; f< tablero.getFilas(); f++){
-        for (int c = 0; c< tablero.getColumnas(); c++){
-            if (tablero.getCelda(f,c) != 0){
-                int valor = tablero.getFilas()-abs(f-(tablero.getFilas()/2)) + tablero.getColumnas()-abs(c-(tablero.getColumnas()/2)); 
-                if (tablero.getCelda(f,c) == id) score_positivo += valor;
-                else score_negativo += valor;
+    double score_positivo = 0, score_negativo = 0;
+    for (int f = 0; f < tablero.getFilas(); f++) {
+        for (int c = 0; c < tablero.getColumnas(); c++) {
+            if (tablero.getCelda(f, c) != 0) {
+                int valor = tablero.getFilas()    - abs(f - (tablero.getFilas()    / 2))
+                          + tablero.getColumnas() - abs(c - (tablero.getColumnas() / 2));
+                if (tablero.getCelda(f, c) == id) score_positivo += valor;
+                else                              score_negativo += valor;
             }
         }
     }
@@ -306,36 +344,37 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 }
 
 // ============================================================
-// Función auxiliar: evalúa una ventana de n celdas consecutivas.
+// evaluarVentana — ajustada a la regla 1-2-2-2
 //
-// Pesos ofensivos (fichas propias):
-//   n-1 fichas → 100000   (un paso de ganar)
-//   n-2 fichas → 1000
-//   n-3 fichas → 10
-//   1 ficha    → 1
+// En este juego cada jugador coloca HASTA 2 fichas por turno.
+// Esto cambia radicalmente el peligro de cada amenaza:
 //
-// Pesos defensivos (fichas rivales) — deliberadamente el DOBLE:
-// La teoría de juegos nos dice que bloquear una amenaza inmediata
-// del rival vale más que crear una propia equivalente, porque si
-// no la bloqueamos el rival gana con certeza.
-//   n-1 fichas → 200000
-//   n-2 fichas → 3000
-//   n-3 fichas → 30
-//   1 ficha    → 1
+//   n-1 fichas propias  (4 de 5): ganamos en ESTE turno        → +100000
+//   n-2 fichas propias  (3 de 5): ganamos en el PRÓXIMO turno  → +50000
+//   n-3 fichas propias  (2 de 5): necesitamos 2 turnos más     → +500
+//   1 ficha propia                                              → +1
+//
+//   n-1 fichas rivales (4 de 5): rival gana en este turno      → -200000 (BLOQUEAR YA)
+//   n-2 fichas rivales (3 de 5): rival gana en el PRÓXIMO turno→ -80000  (casi igual de urgente)
+//   n-3 fichas rivales (2 de 5): rival necesita 2 turnos más   → -3000
+//   1 ficha rival                                               → -1
+//
+// Los pesos defensivos son mayores que los ofensivos equivalentes
+// porque si no bloqueamos una amenaza inmediata perdemos con certeza.
 // ============================================================
 static double evaluarVentana(int mias, int rival, int n) {
-    if (mias > 0 && rival > 0) return 0.0; // ventana bloqueada
+    if (mias > 0 && rival > 0) return 0.0; // ventana bloqueada, vale 0
 
     if (mias > 0) {
-        if (mias == n - 1) return  100000.0;
-        if (mias == n - 2) return    1000.0;
-        if (mias == n - 3) return      10.0;
+        if (mias == n - 1) return 100000.0;
+        if (mias == n - 2) return  50000.0;
+        if (mias == n - 3) return    500.0;
         return 1.0;
     }
     if (rival > 0) {
         if (rival == n - 1) return -200000.0;
-        if (rival == n - 2) return   -3000.0;
-        if (rival == n - 3) return     -30.0;
+        if (rival == n - 2) return  -80000.0;
+        if (rival == n - 3) return   -3000.0;
         return -1.0;
     }
     return 0.0;
@@ -344,45 +383,27 @@ static double evaluarVentana(int mias, int rival, int n) {
 /**
  * @brief heuristica1 — Heurística principal para la competición (-id1 1).
  *
- * Criterios (de mayor a menor importancia):
- *
- * 1. Victoria/Derrota inmediata → ±GANAR (1e12)
- *
- * 2. Alineaciones parciales en las 4 direcciones:
- *    Evaluamos cada ventana de tamaño n con evaluarVentana().
- *    Las ventanas con fichas de ambos jugadores valen 0 (bloqueadas).
- *    Los pesos defensivos son el doble que los ofensivos.
- *
- * 3. Control del centro:
- *    Las casillas centrales del tablero 9x9 tienen más conexiones posibles
- *    (más ventanas de 5 pasan por ellas). Bonus proporcional a la proximidad.
- *
- * 4. Casillas especiales:
- *    - Roja: nuestra ficha fue convertida al rival → penalización -500
- *    - Verde: da movimiento extra → bonus ±80 según quién la controla
- *    - Amarilla (bomba): si nuestra ficha la activó → penalización -5000
- *      (destruimos nuestro propio setup). Si el rival la activó → +1000.
+ * Criterio 1 — Victoria/Derrota inmediata.
+ * Criterio 2 — Alineaciones parciales (evaluarVentana, ajustada al 1-2-2-2).
+ * Criterio 3 — Control del centro.
+ * Criterio 4 — Casillas especiales (roja, verde, amarilla).
  */
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     int oponente = (id == 1) ? 2 : 1;
     int ganador  = tablero.comprobarGanador();
 
-    // Criterio 1: victoria / derrota / empate técnico
     if (ganador == id)       return  GANAR;
     if (ganador == oponente) return  PERDER;
     if (ganador == -1)       return  0.0;
 
     int filas = tablero.getFilas();
     int cols  = tablero.getColumnas();
-    int n     = tablero.getNParaGanar(); // 5 en modo competición
-
+    int n     = tablero.getNParaGanar();
     double score = 0.0;
 
     // Criterio 2: alineaciones parciales en las 4 direcciones
-    // Horizontal (0,1), Vertical (1,0), Diagonal \ (1,1), Diagonal / (1,-1)
     const int dfs[] = { 0,  1,  1,  1};
     const int dcs[] = { 1,  0,  1, -1};
-
     for (int d = 0; d < 4; d++) {
         int df = dfs[d], dc = dcs[d];
         for (int f = 0; f < filas; f++) {
@@ -390,7 +411,6 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                 int ef = f + df * (n - 1);
                 int ec = c + dc * (n - 1);
                 if (ef < 0 || ef >= filas || ec < 0 || ec >= cols) continue;
-
                 int mias = 0, rival = 0;
                 for (int k = 0; k < n; k++) {
                     int celda = tablero.getCelda(f + df * k, c + dc * k);
@@ -403,8 +423,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     }
 
     // Criterio 3: control del centro
-    int centro_f = filas / 2;
-    int centro_c = cols  / 2;
+    int centro_f = filas / 2, centro_c = cols / 2;
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             int celda = tablero.getCelda(f, c);
@@ -422,22 +441,16 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
             Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
             if (tipo == Tablero::TipoCelda::NORMAL) continue;
             int celda = tablero.getCelda(f, c);
-
             if (tipo == Tablero::TipoCelda::ROJO) {
-                // Nuestra ficha se convirtió en del rival → muy malo
                 if      (celda == id)       score -= 500.0;
                 else if (celda == oponente) score += 500.0;
-            }
-            else if (tipo == Tablero::TipoCelda::VERDE) {
-                // Da movimiento extra → bueno si la controlamos
+            } else if (tipo == Tablero::TipoCelda::VERDE) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
-            }
-            else if (tipo == Tablero::TipoCelda::AMARILLO) {
-                // Bomba: si nuestra ficha está aquí, significa que la activamos
-                // y destruimos todo en su fila y columna (incluido nuestro setup)
-                if      (celda == id)       score -= 5000.0;
-                else if (celda == oponente) score += 1000.0;
+            } else if (tipo == Tablero::TipoCelda::AMARILLO) {
+                // Activar una bomba propia destruye nuestro setup → penalización fuerte
+                if      (celda == id)       score -= 20000.0;
+                else if (celda == oponente) score +=  1000.0;
             }
         }
     }
@@ -446,10 +459,8 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
 }
 
 /**
- * @brief heuristica2 — Variante más defensiva para comparación.
- * Idéntica a heuristica1 pero con peso defensivo x2 en ventanas
- * y menor bonus de centro (0.3 vs 0.5).
- * Útil para la tabla comparativa de la memoria.
+ * @brief heuristica2 — Variante ultra-defensiva para comparación en la memoria.
+ * Peso defensivo x2 en ventanas + menor bonus de centro.
  */
 double AgenteEstudiante::heuristica2(const Tablero& tablero) {
     int oponente = (id == 1) ? 2 : 1;
@@ -462,12 +473,10 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
     int filas = tablero.getFilas();
     int cols  = tablero.getColumnas();
     int n     = tablero.getNParaGanar();
-
     double score = 0.0;
 
     const int dfs[] = { 0,  1,  1,  1};
     const int dcs[] = { 1,  0,  1, -1};
-
     for (int d = 0; d < 4; d++) {
         int df = dfs[d], dc = dcs[d];
         for (int f = 0; f < filas; f++) {
@@ -475,7 +484,6 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
                 int ef = f + df * (n - 1);
                 int ec = c + dc * (n - 1);
                 if (ef < 0 || ef >= filas || ec < 0 || ec >= cols) continue;
-
                 int mias = 0, rival = 0;
                 for (int k = 0; k < n; k++) {
                     int celda = tablero.getCelda(f + df * k, c + dc * k);
@@ -484,14 +492,12 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
                 }
                 if (mias > 0 && rival > 0) continue;
                 if      (mias  > 0) score += evaluarVentana(mias,  0, n);
-                else if (rival > 0) score += evaluarVentana(0, rival, n) * 2.0; // más defensivo
+                else if (rival > 0) score += evaluarVentana(0, rival, n) * 2.0;
             }
         }
     }
 
-    // Control del centro con menor peso
-    int centro_f = filas / 2;
-    int centro_c = cols  / 2;
+    int centro_f = filas / 2, centro_c = cols / 2;
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             int celda = tablero.getCelda(f, c);
@@ -503,7 +509,6 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
         }
     }
 
-    // Casillas especiales
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
@@ -516,8 +521,8 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
             } else if (tipo == Tablero::TipoCelda::AMARILLO) {
-                if      (celda == id)       score -= 5000.0;
-                else if (celda == oponente) score += 1000.0;
+                if      (celda == id)       score -= 20000.0;
+                else if (celda == oponente) score +=  1000.0;
             }
         }
     }

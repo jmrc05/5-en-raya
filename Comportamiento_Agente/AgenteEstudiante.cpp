@@ -26,25 +26,20 @@ std::pair<int, int> AgenteEstudiante::think(const Tablero& tablero) {
     case ModoJuego::ALEATORIO:
         return JuegaAleatorio(tablero);
         break;
-    
     case ModoJuego::STATUS:
         Status(tablero, mejor);
         return mejor;
-        break;    
-
+        break;
     case ModoJuego::MINIMAX:
         minimax(tablero, 0, profundidadMax, mejor);
         return mejor;
-        break; 
-
+        break;
     case ModoJuego::INTELIGENTE:
-        return JuegaInteligente(tablero);   
+        return JuegaInteligente(tablero);
         break;
     }
-        
     return {-1, -1};
 }
-
 
 std::pair<int, int> SacarMovimiento(const Tablero& padre, const Tablero &hijo){
     for(int f=0; f<padre.getFilas(); ++f)
@@ -55,16 +50,10 @@ std::pair<int, int> SacarMovimiento(const Tablero& padre, const Tablero &hijo){
 }
 
 std::pair<int, int> AgenteEstudiante::JuegaAleatorio(const Tablero& tablero) {
-
     auto sucesores = tablero.getSucesores();
-
     if (sucesores.empty()) return {-1, -1};
-
     int elegido = rand() % sucesores.size();
-
-    std::pair<int,int> Mov = SacarMovimiento(tablero, sucesores[elegido]);
-
-    return Mov;
+    return SacarMovimiento(tablero, sucesores[elegido]);
 }
 
 AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std::pair<int,int> &Mov) {
@@ -112,7 +101,6 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
     nodosVisitados++;
     if (abortarBanda) return 0;
-    
     if (std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
         abortarBanda = true;
         return 0;
@@ -182,7 +170,6 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
     nodosVisitados++;
     if (abortarBanda) return 0;
-    
     if (std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
         abortarBanda = true;
         return 0;
@@ -213,8 +200,9 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
         if (mov.first != -1) {
             int dist = std::abs(mov.first - centro_f) + std::abs(mov.second - centro_c);
             sc += (tablero.getFilas() + tablero.getColumnas() - dist) * 2.0;
+            // Verde: bonus moderado en ordering (no debe dominar sobre táctica)
             if (tablero.getTipoCelda(mov.first, mov.second) == Tablero::TipoCelda::VERDE)
-                sc += 500.0;
+                sc += 80.0;
         }
         ranking.push_back({sc, i});
     }
@@ -267,12 +255,9 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
 
 double AgenteEstudiante::heuristica(const Tablero& tablero) {
     switch(numHeuristica) {
-        case 0: return heuristicaPrueba(tablero);
-                break;
-        case 1: return heuristica1(tablero);
-                break;
-        case 2: return heuristica2(tablero);
-                break;
+        case 0: return heuristicaPrueba(tablero); break;
+        case 1: return heuristica1(tablero);      break;
+        case 2: return heuristica2(tablero);      break;
         default: return heuristica1(tablero);
     }
 }
@@ -282,7 +267,6 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
     int n = tablero.getNParaGanar();
     int oponente = (id == 1) ? 2 : 1;
     double score_positivo = 0;
-
     double score_negativo = 0;
 
     for (int f=0; f< tablero.getFilas(); f++ ){
@@ -298,23 +282,25 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
             }
         }
     }
-
-   
     return score_positivo - score_negativo;
 }
 
+// Pesos drásticamente aumentados para priorizar táctica sobre posición.
+// La táctica (amenazas de líneas) domina sobre el centro y casillas especiales.
+// Pesos ofensivos: 3000000 / 150000 / 8000 / 1
+// Pesos defensivos (siempre mayores): 5000000 / 500000 / 15000 / 2
 static double evaluarVentana(int mias, int rival, int n) {
     if (mias > 0 && rival > 0) return 0.0;
     if (mias > 0) {
-        if (mias == n - 1) return  50000.0;
-        if (mias == n - 2) return  10000.0;
-        if (mias == n - 3) return    100.0;
+        if (mias == n - 1) return  3000000.0;
+        if (mias == n - 2) return   150000.0;
+        if (mias == n - 3) return     8000.0;
         return 1.0;
     }
     if (rival > 0) {
-        if (rival == n - 1) return -100000.0;
-        if (rival == n - 2) return  -50000.0;
-        if (rival == n - 3) return    -500.0;
+        if (rival == n - 1) return -5000000.0;
+        if (rival == n - 2) return  -500000.0;
+        if (rival == n - 3) return   -15000.0;
         return -2.0;
     }
     return 0.0;
@@ -333,6 +319,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     int n     = tablero.getNParaGanar();
     double score = 0.0;
 
+    // Alineaciones parciales en las 4 direcciones
     const int dfs[] = { 0,  1,  1,  1};
     const int dcs[] = { 1,  0,  1, -1};
 
@@ -359,18 +346,33 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
         }
     }
 
+    // contarCombinaciones: cuenta líneas de longitud dada para cada jugador.
+    // Penaliza/premia combinaciones con pesos muy altos para detección de casi-mate
+    // y dobles amenazas que evaluarVentana no captura directamente.
+    int mis4 = tablero.contarCombinaciones(n - 1, id);
+    int sus4 = tablero.contarCombinaciones(n - 1, oponente);
+    int mis3 = tablero.contarCombinaciones(n - 2, id);
+    int sus3 = tablero.contarCombinaciones(n - 2, oponente);
+
+    score += mis4 * 300000.0;
+    score -= sus4 * 600000.0;
+    score += mis3 *  40000.0;
+    score -= sus3 *  80000.0;
+
+    // Centro: peso reducido — la táctica domina sobre la posición
     int centro_f = filas / 2, centro_c = cols / 2;
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             int celda = tablero.getCelda(f, c);
             if (celda == 0) continue;
             int dist  = std::abs(f - centro_f) + std::abs(c - centro_c);
-            double bonus = (filas + cols - dist) * 1.0;
+            double bonus = (filas + cols - dist) * 0.2;
             if (celda == id) score += bonus;
             else             score -= bonus;
         }
     }
 
+    // Casillas especiales
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
@@ -383,7 +385,8 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
             } else if (tipo == Tablero::TipoCelda::AMARILLO) {
-                if      (celda == id)       score -= 75000.0;
+                // Reducido: las bombas pueden ser tácticas útiles
+                if      (celda == id)       score -=  5000.0;
                 else if (celda == oponente) score += 10000.0;
             }
         }

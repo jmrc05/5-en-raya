@@ -2,7 +2,7 @@
  * ============================================================
  *  AgenteEstudiante.cpp — Práctica 3: 5-en-Raya Táctico
  *  Inteligencia Artificial — UGR — Curso 2025-2026
- * ============================================================
+ * ===========================================================
  *
  *  ALGORITMOS:
  *  1. STATUS      — Resolución exhaustiva sin límite de profundidad.

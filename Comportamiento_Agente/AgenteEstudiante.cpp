@@ -29,32 +29,32 @@
  * A. PROFUNDIDAD ITERATIVA: garantiza movimiento válido ante timeout.
  *
  * B. EFECTO HORIZONTE: nodos terminales devuelven ±10000000±prof.
+ *    Prefiere victorias rápidas y alarga derrotas.
  *
- * C. MOVE ORDERING ADAPTATIVO (heuristicaPrueba + detección táctica):
- *    Ordena sucesores combinando heuristicaPrueba (O(81), posicional)
- *    con detección táctica rápida O(4n) que distingue nodos MAX y MIN:
- *      - Nodo MAX (nuestro turno): atacar primero (+8000/+4000),
- *        luego bloquear rival (+6000/+3000).
- *      - Nodo MIN (turno rival): el rival ataca primero (+8000/+4000),
- *        luego bloquea nuestras amenazas (+6000/+3000).
- *    Esta distinción es crítica: como J1 (MAX) explorar primero ataques
- *    genera ventanas amplias pronto; como J2 (MIN) el rival ataca primero
- *    y necesitamos ver esas respuestas para podar correctamente.
+ * C. MOVE ORDERING + PVS: ordena sucesores por heuristicaPrueba (O(81))
+ *    más bonus de centralidad y bonus moderado a casillas verdes.
  *    PVS: el mejor movimiento de la iteración anterior va primero en la raíz.
  *
- * D. HEURÍSTICA 1-2-2-2: 3-en-raya rival = -50000.
+ * D. HEURÍSTICA 1-2-2-2: 3-en-raya rival = -50000 porque el rival
+ *    gana en su PRÓXIMO turno colocando 2 fichas.
  *
  * E. MODO PÁNICO J2: multiplicador 2.0× defensivo cuando id==2.
+ *    Compensa la ventaja de iniciativa estructural de J1 en 1-2-2-2.
  *
  * F. CASILLA AMARILLA CALIBRADA: -75000, entre -50000 y -100000.
+ *    Solo activar bombas para romper 4-en-raya, nunca 3-en-raya.
  *
  * G. FIX CASILLA ROJA (bug corregido): lógica estaba INVERTIDA.
+ *    Quien coloca en rojo pierde la ficha (pasa al rival). Por tanto:
  *    celda==oponente en rojo → nosotros la pusimos, la perdimos → -500.
  *    celda==id en rojo → el rival la puso, nos la regaló → +500.
  *
  * H. CASILLA VERDE REVALORIZADA: de 80 a 5000 en heurística.
+ *    +1 movimiento extra = hasta 3 fichas/turno en 1-2-2-2.
  *
- * I. CONCIENCIA DE LA TRINIDAD: amenazas con huecos Trinity-bloqueados → ×3.
+ * I. CONCIENCIA DE LA TRINIDAD: si todos los huecos de una ventana con
+ *    ≥3 fichas rivales son Trinity-bloqueados este turno → amenaza
+ *    matemáticamente imparable → multiplicador 3.0× defensivo.
  */
 
 #include "AgenteEstudiante.hpp"
@@ -105,8 +105,11 @@ std::pair<int, int> AgenteEstudiante::JuegaAleatorio(const Tablero& tablero) {
 }
 
 /**
- * @brief STATUS: resolución completa. Nodo MAX: VICTORIA>EMPATE>DERROTA.
- *        Nodo MIN: DERROTA nuestra > EMPATE > VICTORIA nuestra.
+ * @brief STATUS: resolución completa sin límite de profundidad.
+ * @details Nodo MAX: VICTORIA > EMPATE > DERROTA.
+ *          Nodo MIN: DERROTA nuestra > EMPATE > VICTORIA nuestra.
+ * @param tablero Estado actual. @param Mov Jugada óptima (salida).
+ * @return VICTORIA, EMPATE o DERROTA con juego óptimo de ambos.
  */
 AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero& tablero, std::pair<int,int>& Mov) {
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
@@ -150,7 +153,10 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero& tablero, std
 
 /**
  * @brief MINIMAX sin poda. Profundidad competición: 4.
- *        Mejora B: efecto horizonte con ±10000000±profundidad.
+ *        Mejora B: efecto horizonte ±10000000±profundidad.
+ * @param tablero Estado actual. @param profundidad Nivel actual.
+ * @param prof_Max Límite de profundidad. @param Mov Jugada elegida (prof=0).
+ * @return Valor heurístico del estado.
  */
 double AgenteEstudiante::minimax(const Tablero& tablero, int profundidad, int prof_Max, std::pair<int,int>& Mov) {
     /* ============== Este trozo de código se tiene que quedar aquí  =============== */
@@ -164,7 +170,7 @@ double AgenteEstudiante::minimax(const Tablero& tablero, int profundidad, int pr
     int oponente = (id == 1) ? 2 : 1;
     int ganador  = tablero.comprobarGanador();
 
-    // Mejora B — Efecto Horizonte
+    // Mejora B — Efecto Horizonte: ganar antes vale más, perder tarde vale más
     if (ganador == id)       return  10000000.0 - profundidad;
     if (ganador == oponente) return -10000000.0 + profundidad;
     if (ganador == -1)       return  0.0;
@@ -196,7 +202,11 @@ double AgenteEstudiante::minimax(const Tablero& tablero, int profundidad, int pr
 
 /**
  * @brief Profundidad Iterativa + PVS (Mejoras A y C).
- *        Garantiza movimiento válido ante timeout.
+ * @details Mejora A: si el tiempo se agota en iteración d, devuelve el
+ *          mejor movimiento de la iteración d-1 completa.
+ *          Mejora C PVS: mejorMovimientoH lleva el hint a alfaBeta.
+ * @param tablero Estado actual.
+ * @return La mejor jugada encontrada en la última iteración completa.
  */
 std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
     std::pair<int,int> mejorMov = {-1, -1};
@@ -231,28 +241,20 @@ std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
  * @details
  * Mejora B — Efecto Horizonte: ±10000000±profundidad en terminales.
  *
- * Mejora C — Move Ordering Adaptativo:
- *   Combina heuristicaPrueba (O(81), posicional) con detección táctica
- *   rápida O(4n) que distingue nodos MAX y MIN:
- *     - En MAX (nuestro turno): nuestras amenazas (+8000/+4000) tienen
- *       más prioridad que los bloques defensivos (+6000/+3000).
- *       Explorar primero nuestros ataques genera alfa altas rápidamente
- *       y poda más ramas del subárbol MIN.
- *     - En MIN (turno rival): las amenazas del rival (+8000/+4000)
- *       tienen prioridad sobre bloquear las nuestras (+6000/+3000).
- *       El rival elige sus mejores movimientos primero, lo que genera
- *       betas bajas rápidamente y poda más ramas del subárbol MAX.
- *   Esta distinción MAX/MIN es la corrección clave sobre versiones
- *   anteriores donde el ordering era el mismo para ambos nodos.
+ * Mejora C — Move Ordering + PVS:
+ *   Ordena sucesores por heuristicaPrueba (O(81), evaluación posicional
+ *   rápida) más bonus de centralidad del movimiento concreto y bonus
+ *   moderado a casillas verdes. MAX: mejor primero. MIN: peor para
+ *   nosotros primero. Esto estrecha la ventana alfa-beta desde el inicio.
+ *   PVS: en la raíz, mejorMovimientoH (mejor de iteración anterior)
+ *   va primero para maximizar los cortes en la iteración actual.
  *
- *   PVS: en la raíz, el mejor movimiento de la iteración anterior
- *   (mejorMovimientoH) se coloca primero para maximizar los cortes.
+ * Poda BETA (MAX): alfa >= beta → MIN padre nunca elegiría aquí.
+ * Poda ALFA (MIN): beta <= alfa → MAX abuelo ya tiene algo mejor.
  *
- * @param tablero Estado actual.
- * @param profundidad Nivel actual (0=raíz).
- * @param prof_Max Límite de profundidad.
- * @param alfa Cota inferior para MAX. @param beta Cota superior para MIN.
- * @param Mov Jugada elegida (solo actualizada en profundidad 0).
+ * @param tablero Estado actual. @param profundidad Nivel actual (0=raíz).
+ * @param prof_Max Límite de profundidad. @param alfa Cota inferior MAX.
+ * @param beta Cota superior MIN. @param Mov Jugada elegida (prof=0).
  * @return Valor heurístico del estado tras la poda.
  */
 double AgenteEstudiante::alfaBeta(const Tablero& tablero, int profundidad, int prof_Max,
@@ -279,73 +281,29 @@ double AgenteEstudiante::alfaBeta(const Tablero& tablero, int profundidad, int p
 
     bool esMax = (tablero.getJugadorTurno() == id);
 
-    // Mejora C — Move Ordering Adaptativo con detección táctica MAX/MIN
+    // Mejora C — Move Ordering:
+    // heuristicaPrueba (O(81)) estima la calidad posicional del estado resultante.
+    // Añadimos bonus de centralidad del movimiento concreto (casillas centrales
+    // tienen más ventanas de n pasando por ellas) y bonus moderado a casillas
+    // verdes (movimiento extra valioso, pero no debe dominar sobre ataques/bloques).
     int centro_f = tablero.getFilas()    / 2;
     int centro_c = tablero.getColumnas() / 2;
-    int n        = tablero.getNParaGanar();
-
-    // Direcciones: horizontal, vertical, diagonal \, diagonal /
-    const int dfs2[] = {0, 1, 1, 1};
-    const int dcs2[] = {1, 0, 1, -1};
 
     std::vector<std::pair<double, int>> ranking;
     ranking.reserve(sucesores.size());
-
     for (int i = 0; i < (int)sucesores.size(); i++) {
-        // Base: heuristicaPrueba evalúa la posición global resultante (O(81))
         double sc = heuristicaPrueba(sucesores[i]);
         std::pair<int,int> mov = SacarMovimiento(tablero, sucesores[i]);
-
         if (mov.first != -1) {
-            // Centralidad: casillas centrales tienen más conexiones posibles
             int dist = std::abs(mov.first - centro_f) + std::abs(mov.second - centro_c);
             sc += (tablero.getFilas() + tablero.getColumnas() - dist) * 2.0;
-
-            // Verde: bonus moderado (valioso pero no debe dominar sobre bloques urgentes)
             if (tablero.getTipoCelda(mov.first, mov.second) == Tablero::TipoCelda::VERDE)
                 sc += 500.0;
-
-            // Detección táctica rápida O(4n): contamos piezas consecutivas
-            // desde el movimiento en ambas direcciones de cada eje
-            for (int d = 0; d < 4; d++) {
-                int piezasRival = 0, piezasMias = 0;
-
-                for (int dir = -1; dir <= 1; dir += 2) {
-                    for (int k = 1; k < n; k++) {
-                        int ff = mov.first  + dfs2[d] * dir * k;
-                        int cc = mov.second + dcs2[d] * dir * k;
-                        if (ff < 0 || ff >= tablero.getFilas() ||
-                            cc < 0 || cc >= tablero.getColumnas()) break;
-                        int celda = tablero.getCelda(ff, cc);
-                        if      (celda == oponente) piezasRival++;
-                        else if (celda == id)       piezasMias++;
-                        else break;  // hueco vacío interrumpe la cadena
-                    }
-                }
-
-                if (esMax) {
-                    // Nodo MAX (nuestro turno): priorizamos atacar primero.
-                    // Explorar primero nuestras amenazas genera alfas altas
-                    // rápidamente, podando más ramas del subárbol MIN.
-                    if      (piezasMias >= n-1) sc += 8000.0;  // Completamos 4-en-raya
-                    else if (piezasMias >= n-2) sc += 4000.0;  // Completamos 3-en-raya
-                    if      (piezasRival >= n-1) sc += 6000.0; // Bloqueamos 4-en-raya rival
-                    else if (piezasRival >= n-2) sc += 3000.0; // Bloqueamos 3-en-raya rival
-                } else {
-                    // Nodo MIN (turno rival): el rival ataca primero.
-                    // Explorar primero los ataques del rival genera betas bajas
-                    // rápidamente, podando más ramas del subárbol MAX.
-                    if      (piezasRival >= n-1) sc += 8000.0; // Rival completa 4-en-raya
-                    else if (piezasRival >= n-2) sc += 4000.0; // Rival completa 3-en-raya
-                    if      (piezasMias >= n-1)  sc += 6000.0; // Rival bloquea nuestro 4-en-raya
-                    else if (piezasMias >= n-2)  sc += 3000.0; // Rival bloquea nuestro 3-en-raya
-                }
-            }
         }
         ranking.push_back({sc, i});
     }
 
-    // MAX: mayor puntuación primero. MIN: menor puntuación primero.
+    // MAX: mejor para nosotros primero. MIN: peor para nosotros primero.
     if (esMax)
         std::sort(ranking.begin(), ranking.end(),
                   [](const std::pair<double,int>& a, const std::pair<double,int>& b){
@@ -358,6 +316,8 @@ double AgenteEstudiante::alfaBeta(const Tablero& tablero, int profundidad, int p
                   });
 
     // PVS: en la raíz colocamos el mejor movimiento de la iteración anterior
+    // primero para que alfa-beta empiece por la rama más prometedora y genere
+    // la mejor ventana posible desde el inicio, maximizando los cortes.
     if (profundidad == 0 && mejorMovimientoH.first != -1) {
         for (int i = 1; i < (int)ranking.size(); i++) {
             std::pair<int,int> mov = SacarMovimiento(tablero, sucesores[ranking[i].second]);
@@ -435,9 +395,11 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 
 /**
  * @brief Evalúa una ventana de n casillas (Mejora D, ajustada al 1-2-2-2).
- * @details Con 3 fichas rivales el rival gana en su próximo turno (coloca 2).
+ * @details Con 3 fichas rivales el rival gana en su próximo turno.
  *          Pesos ofensivos: 50000/10000/100/1.
  *          Pesos defensivos: 100000/50000/500/2 (siempre mayores).
+ * @param mias Fichas propias. @param rival Fichas rivales. @param n Tamaño.
+ * @return Puntuación de la ventana.
  */
 static double evaluarVentana(int mias, int rival, int n) {
     if (mias > 0 && rival > 0) return 0.0;
@@ -457,23 +419,23 @@ static double evaluarVentana(int mias, int rival, int n) {
 }
 
 /**
- * @brief Heurística principal para competición (-id1 1). Implementa Mejoras D-I.
+ * @brief Heurística principal para competición (-id1 1). Mejoras D-I.
  *
  * @details
- * Criterio 1 — Victoria/Derrota inmediata (±10000000).
+ * Criterio 1: Victoria/Derrota inmediata (±10000000).
  *
- * Criterio 2 — Alineaciones parciales (Mejora D + E + I):
- *   Evalúa ventanas de tamaño n en las 4 direcciones con evaluarVentana.
- *   Mejora E: multiplicador 2.0× defensivo cuando id==2 (Modo Pánico J2).
- *   Mejora I: si todos los huecos de una ventana con ≥3 fichas rivales
- *   son Trinity-bloqueados este turno → amenaza imparable → ×3.
+ * Criterio 2: Alineaciones parciales (Mejoras D, E, I):
+ *   - evaluarVentana ajustada al 1-2-2-2 (Mejora D).
+ *   - Modo Pánico J2: ×2.0 defensivo cuando id==2 (Mejora E).
+ *   - Conciencia de la Trinidad: amenazas con huecos Trinity-bloqueados
+ *     este turno reciben factor ×3.0 por ser matemáticamente imparables (Mejora I).
  *
- * Criterio 3 — Control del centro.
+ * Criterio 3: Control del centro.
  *
- * Criterio 4 — Casillas especiales:
- *   Mejora G (Fix roja): celda==oponente → -500; celda==id → +500.
- *   Mejora H (Verde revalorizada): 80 → 5000.
- *   Mejora F (Amarilla calibrada): -75000.
+ * Criterio 4: Casillas especiales:
+ *   - Roja (Mejora G): celda==oponente → -500; celda==id → +500.
+ *   - Verde (Mejora H): 80 → 5000 (+1 movimiento extra).
+ *   - Amarilla (Mejora F): -75000 (solo activar para romper 4-en-raya).
  *
  * @param tablero Estado a evaluar.
  * @return Puntuación (positiva=ventaja propia, negativa=ventaja rival).
@@ -494,7 +456,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     // Fase actual para Mejora I (Conciencia de la Trinidad)
     int fase = tablero.getFaseActual();
 
-    // Criterio 2: alineaciones parciales en las 4 direcciones
+    // Criterio 2: alineaciones en las 4 direcciones
     const int dfs[] = {0, 1, 1, 1};
     const int dcs[] = {1, 0, 1, -1};
 
@@ -515,7 +477,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                 if (mias == 0 && rival > 0) {
                     // Mejora I — Conciencia de la Trinidad:
                     // Si ≥3 fichas rivales y todos los huecos son Trinity-bloqueados
-                    // este turno, la amenaza es matemáticamente imparable → ×3.
+                    // este turno, la amenaza es imparable → factor ×3.
                     double factorTrinidad = 1.0;
                     if (rival >= n - 2) {
                         bool hayHuecoAccesible = false;
@@ -530,9 +492,8 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                         }
                         if (!hayHuecoAccesible) factorTrinidad = 3.0;
                     }
-
                     double val = evaluarVentana(0, rival, n) * factorTrinidad;
-                    // Mejora E — Modo Pánico J2: ×2.0 defensivo cuando somos J2
+                    // Mejora E — Modo Pánico J2: ×2.0 defensivo cuando id==2
                     score += (id == 2) ? val * 2.0 : val;
                 } else {
                     score += evaluarVentana(mias, rival, n);
@@ -563,9 +524,8 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
 
             if (tipo == Tablero::TipoCelda::ROJO) {
                 // Mejora G — Fix (lógica estaba INVERTIDA):
-                // Quien coloca en rojo pierde la ficha (se convierte en del rival).
-                // celda==oponente → nosotros la pusimos, la perdimos → penalizar
-                // celda==id       → rival la puso, nos la regaló    → bonificar
+                // celda==oponente → nosotros la pusimos, la perdimos → -500
+                // celda==id       → rival la puso, nos la regaló    → +500
                 if      (celda == oponente) score -= 500.0;
                 else if (celda == id)       score += 500.0;
 
@@ -576,8 +536,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                 else if (celda == oponente) score -= 5000.0;
 
             } else if (tipo == Tablero::TipoCelda::AMARILLO) {
-                // Mejora F — Calibrada entre -50000 y -100000:
-                // Solo activar bombas para romper 4-en-raya, nunca 3-en-raya
+                // Mejora F — Entre -50000 y -100000: solo activar para 4-en-raya
                 if      (celda == id)       score -= 75000.0;
                 else if (celda == oponente) score += 10000.0;
             }
@@ -589,8 +548,10 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
 
 /**
  * @brief Heurística alternativa ultra-defensiva para comparación en la memoria.
- * @details Peso defensivo ×2 en ventanas, centro 0.5, sin Trinidad.
- *          Incluye fixes G y H para comparación justa.
+ * @details Peso defensivo ×2 en ventanas, centro ×0.5, sin Trinidad.
+ *          Incluye fixes G y H para comparación justa con heuristica1.
+ * @param tablero Estado a evaluar.
+ * @return Puntuación (positiva=ventaja propia, negativa=ventaja rival).
  */
 double AgenteEstudiante::heuristica2(const Tablero& tablero) {
     int oponente = (id == 1) ? 2 : 1;

@@ -312,11 +312,11 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     int n     = tablero.getNParaGanar();
     double score = 0.0;
 
-    // Estrategia asimétrica según rol:
-    // J1 tiene ventaja de iniciativa en 1-2-2-2 → puede ser más ofensivo.
-    // J2 sufre la iniciativa de J1 → debe ser más paranoico defensivamente.
-    double factorAtaque  = (id == 1) ? 1.0 : 0.6;  // J2 ataca menos
-    double factorDefensa = (id == 1) ? 1.0 : 2.5;  // J2 defiende más
+    // Estrategia asimetrica segun rol (pesos base distintos):
+    // J1: pesos equilibrados del 7/8 (da 4/4 como J1).
+    // J2: pesos defensivos 10x mas agresivos porque J1 tiene ventaja
+    // estructural en 1-2-2-2 y puede crear amenazas imparables si J2
+    // no bloquea con suficiente urgencia.
 
     // Alineaciones parciales en las 4 direcciones
     const int dfs[] = { 0,  1,  1,  1};
@@ -335,21 +335,29 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                     if      (celda == id)       mias++;
                     else if (celda == oponente) rival++;
                 }
-                if (mias == 0 && rival > 0) {
-                    // Amenaza rival: aplicamos factor defensivo según rol
-                    score += evaluarVentana(0, rival, n) * factorDefensa;
-                } else if (rival == 0 && mias > 0) {
-                    // Amenaza propia: aplicamos factor ofensivo según rol
-                    score += evaluarVentana(mias, 0, n) * factorAtaque;
+                if (mias > 0 && rival > 0) continue;
+
+                if (id == 1) {
+                    score += evaluarVentana(mias, rival, n);
+                } else {
+                    if (mias > 0) {
+                        if      (mias == n-1) score += 200000.0;
+                        else if (mias == n-2) score +=  30000.0;
+                        else if (mias == n-3) score +=   1000.0;
+                        else                  score +=      1.0;
+                    } else if (rival > 0) {
+                        if      (rival == n-1) score -= 1000000.0;
+                        else if (rival == n-2) score -=  200000.0;
+                        else if (rival == n-3) score -=    5000.0;
+                        else                   score -=       2.0;
+                    }
                 }
-                // Si hay de ambos: ventana bloqueada → 0
             }
         }
     }
 
     // contarCombinaciones: solo se usa como J2.
-    // Como J1 los pesos base ya dan 4/4. Como J2 detecta dobles amenazas
-    // del rival (forks) que evaluarVentana local no ve globalmente.
+    // Detecta dobles amenazas (forks) que evaluarVentana local no ve.
     if (id == 2) {
         int n_jug = tablero.getNParaGanar();
         int mis4  = tablero.contarCombinaciones(n_jug - 1, id);

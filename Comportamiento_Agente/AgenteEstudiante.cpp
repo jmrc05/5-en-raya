@@ -347,20 +347,21 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
         }
     }
 
-    // contarCombinaciones: cuenta líneas de longitud exacta en el tablero.
-    // Detecta dobles amenazas (forks) que evaluarVentana no captura porque
-    // analiza ventanas locales, no el número global de amenazas simultáneas.
-    // Pesos defensivos el doble que ofensivos, escalados por rol.
-    int n_jug = tablero.getNParaGanar();
-    int mis4  = tablero.contarCombinaciones(n_jug - 1, id);
-    int sus4  = tablero.contarCombinaciones(n_jug - 1, oponente);
-    int mis3  = tablero.contarCombinaciones(n_jug - 2, id);
-    int sus3  = tablero.contarCombinaciones(n_jug - 2, oponente);
+    // contarCombinaciones: solo se usa como J2.
+    // Como J1 los pesos base ya dan 4/4. Como J2 detecta dobles amenazas
+    // del rival (forks) que evaluarVentana local no ve globalmente.
+    if (id == 2) {
+        int n_jug = tablero.getNParaGanar();
+        int mis4  = tablero.contarCombinaciones(n_jug - 1, id);
+        int sus4  = tablero.contarCombinaciones(n_jug - 1, oponente);
+        int mis3  = tablero.contarCombinaciones(n_jug - 2, id);
+        int sus3  = tablero.contarCombinaciones(n_jug - 2, oponente);
 
-    score += mis4 * 300000.0 * factorAtaque;
-    score -= sus4 * 600000.0 * factorDefensa;
-    score += mis3 *  40000.0 * factorAtaque;
-    score -= sus3 *  80000.0 * factorDefensa;
+        score += mis4 * 300000.0;
+        score -= sus4 * 600000.0;
+        score += mis3 *  40000.0;
+        score -= sus3 *  80000.0;
+    }
 
     // Centro: J1 valora más el centro (ofensivo), J2 lo valora menos
     int centro_f = filas / 2, centro_c = cols / 2;

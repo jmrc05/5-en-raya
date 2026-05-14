@@ -269,6 +269,12 @@ double AgenteEstudiante::alfaBeta(const Tablero& tablero, int profundidad, int p
         }
     }
 
+    // Limitamos el branching factor para alcanzar mayor profundidad en el mismo tiempo.
+    // Con 12 sucesores en vez de ~25: 12^5=248K nodos vs 25^5=9.7M → profundidad 5 alcanzable.
+    // El move ordering garantiza que los 12 elegidos son los más prometedores.
+    const int MAX_BRANCH = 12;
+    if ((int)ranking.size() > MAX_BRANCH) ranking.resize(MAX_BRANCH);
+
     if (esMax) {
         double mejor = MenosInfinito;
         for (auto& [sc, idx] : ranking) {

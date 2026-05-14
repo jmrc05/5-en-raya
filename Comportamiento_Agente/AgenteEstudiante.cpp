@@ -63,7 +63,6 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
 
     int oponente = (id == 1) ? 2 : 1;
     int ganador  = tablero.comprobarGanador();
-
     if (ganador == id)       return Resultado::VICTORIA;
     if (ganador == oponente) return Resultado::DERROTA;
     if (ganador == -1)       return Resultado::EMPATE;
@@ -200,9 +199,8 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
         if (mov.first != -1) {
             int dist = std::abs(mov.first - centro_f) + std::abs(mov.second - centro_c);
             sc += (tablero.getFilas() + tablero.getColumnas() - dist) * 2.0;
-            // Verde: bonus moderado en ordering (no debe dominar sobre táctica)
             if (tablero.getTipoCelda(mov.first, mov.second) == Tablero::TipoCelda::VERDE)
-                sc += 80.0;
+                sc += 500.0;
         }
         ranking.push_back({sc, i});
     }
@@ -268,39 +266,34 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
     int oponente = (id == 1) ? 2 : 1;
     double score_positivo = 0;
     double score_negativo = 0;
-
-    for (int f=0; f< tablero.getFilas(); f++ ){
+    for (int f=0; f< tablero.getFilas(); f++){
         for (int c = 0; c< tablero.getColumnas(); c++){
-            if (tablero.getCelda(f,c) != 0 ){
+            if (tablero.getCelda(f,c) != 0){
                 int valor = tablero.getFilas()-abs(f-(tablero.getFilas()/2)) + tablero.getColumnas()-abs(c-(tablero.getColumnas()/2)); 
-                if (tablero.getCelda(f,c) == id){
-                  score_positivo += valor;
-                 }
-                else {
-                  score_negativo += valor;
-                }
+                if (tablero.getCelda(f,c) == id) score_positivo += valor;
+                else                             score_negativo += valor;
             }
         }
     }
     return score_positivo - score_negativo;
 }
 
-// Pesos drásticamente aumentados para priorizar táctica sobre posición.
-// La táctica (amenazas de líneas) domina sobre el centro y casillas especiales.
-// Pesos ofensivos: 3000000 / 150000 / 8000 / 1
-// Pesos defensivos (siempre mayores): 5000000 / 500000 / 15000 / 2
+// Evaluación de ventana de n casillas con pesos ajustados al 1-2-2-2.
+// Defensivos siempre mayores que ofensivos: bloquear amenaza inmediata
+// vale más que crear una equivalente porque el rival gana con certeza
+// si no bloqueamos y nosotros no necesariamente ganamos si atacamos.
 static double evaluarVentana(int mias, int rival, int n) {
     if (mias > 0 && rival > 0) return 0.0;
     if (mias > 0) {
-        if (mias == n - 1) return  3000000.0;
-        if (mias == n - 2) return   150000.0;
-        if (mias == n - 3) return     8000.0;
+        if (mias == n - 1) return  50000.0;
+        if (mias == n - 2) return  10000.0;
+        if (mias == n - 3) return    100.0;
         return 1.0;
     }
     if (rival > 0) {
-        if (rival == n - 1) return -5000000.0;
-        if (rival == n - 2) return  -500000.0;
-        if (rival == n - 3) return   -15000.0;
+        if (rival == n - 1) return -100000.0;
+        if (rival == n - 2) return  -50000.0;
+        if (rival == n - 3) return    -500.0;
         return -2.0;
     }
     return 0.0;
@@ -318,6 +311,12 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     int cols  = tablero.getColumnas();
     int n     = tablero.getNParaGanar();
     double score = 0.0;
+
+    // Estrategia asimétrica según rol:
+    // J1 tiene ventaja de iniciativa en 1-2-2-2 → puede ser más ofensivo.
+    // J2 sufre la iniciativa de J1 → debe ser más paranoico defensivamente.
+    double factorAtaque  = (id == 1) ? 1.0 : 0.6;  // J2 ataca menos
+    double factorDefensa = (id == 1) ? 1.0 : 2.5;  // J2 defiende más
 
     // Alineaciones parciales en las 4 direcciones
     const int dfs[] = { 0,  1,  1,  1};
@@ -337,36 +336,41 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                     else if (celda == oponente) rival++;
                 }
                 if (mias == 0 && rival > 0) {
-                    double val = evaluarVentana(0, rival, n);
-                    score += (id == 2) ? val * 2.0 : val;
-                } else {
-                    score += evaluarVentana(mias, rival, n);
+                    // Amenaza rival: aplicamos factor defensivo según rol
+                    score += evaluarVentana(0, rival, n) * factorDefensa;
+                } else if (rival == 0 && mias > 0) {
+                    // Amenaza propia: aplicamos factor ofensivo según rol
+                    score += evaluarVentana(mias, 0, n) * factorAtaque;
                 }
+                // Si hay de ambos: ventana bloqueada → 0
             }
         }
     }
 
-    // contarCombinaciones: cuenta líneas de longitud dada para cada jugador.
-    // Penaliza/premia combinaciones con pesos muy altos para detección de casi-mate
-    // y dobles amenazas que evaluarVentana no captura directamente.
-    int mis4 = tablero.contarCombinaciones(n - 1, id);
-    int sus4 = tablero.contarCombinaciones(n - 1, oponente);
-    int mis3 = tablero.contarCombinaciones(n - 2, id);
-    int sus3 = tablero.contarCombinaciones(n - 2, oponente);
+    // contarCombinaciones: cuenta líneas de longitud exacta en el tablero.
+    // Detecta dobles amenazas (forks) que evaluarVentana no captura porque
+    // analiza ventanas locales, no el número global de amenazas simultáneas.
+    // Pesos defensivos el doble que ofensivos, escalados por rol.
+    int n_jug = tablero.getNParaGanar();
+    int mis4  = tablero.contarCombinaciones(n_jug - 1, id);
+    int sus4  = tablero.contarCombinaciones(n_jug - 1, oponente);
+    int mis3  = tablero.contarCombinaciones(n_jug - 2, id);
+    int sus3  = tablero.contarCombinaciones(n_jug - 2, oponente);
 
-    score += mis4 * 300000.0;
-    score -= sus4 * 600000.0;
-    score += mis3 *  40000.0;
-    score -= sus3 *  80000.0;
+    score += mis4 * 300000.0 * factorAtaque;
+    score -= sus4 * 600000.0 * factorDefensa;
+    score += mis3 *  40000.0 * factorAtaque;
+    score -= sus3 *  80000.0 * factorDefensa;
 
-    // Centro: peso reducido — la táctica domina sobre la posición
+    // Centro: J1 valora más el centro (ofensivo), J2 lo valora menos
     int centro_f = filas / 2, centro_c = cols / 2;
+    double pesoCentro = (id == 1) ? 1.0 : 0.4;
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
             int celda = tablero.getCelda(f, c);
             if (celda == 0) continue;
             int dist  = std::abs(f - centro_f) + std::abs(c - centro_c);
-            double bonus = (filas + cols - dist) * 0.2;
+            double bonus = (filas + cols - dist) * pesoCentro;
             if (celda == id) score += bonus;
             else             score -= bonus;
         }
@@ -385,8 +389,7 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                 if      (celda == id)       score +=  80.0;
                 else if (celda == oponente) score -=  80.0;
             } else if (tipo == Tablero::TipoCelda::AMARILLO) {
-                // Reducido: las bombas pueden ser tácticas útiles
-                if      (celda == id)       score -=  5000.0;
+                if      (celda == id)       score -= 75000.0;
                 else if (celda == oponente) score += 10000.0;
             }
         }

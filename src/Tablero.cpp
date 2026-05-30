@@ -174,6 +174,12 @@ bool Tablero::ponerPieza(int f, int c, int jugador) {
  * @brief Genera todos los estados sucesores válidos desde el tablero actual.
  * @return Un vector de objetos Tablero representando los estados hijos.
  */
+void Tablero::pasarTurno() {
+    turnoActual++;
+    if (jugadorTurno == 2) faseActual++;
+    jugadorTurno = (jugadorTurno == 1) ? 2 : 1;
+}
+
 std::vector<Tablero> Tablero::getSucesores() const {
     std::vector<Tablero> sucesores;
     
@@ -205,6 +211,13 @@ std::vector<Tablero> Tablero::getSucesores() const {
             }
         }
     }
+    // Si no hay movimientos válidos, añadir sucesor de "pasar turno"
+    if (sucesores.empty() && modoNinja) {
+        Tablero paseTurno = *this;
+        paseTurno.pasarTurno();
+        sucesores.push_back(paseTurno);
+    }
+
     return sucesores;
 }
 

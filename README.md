@@ -101,8 +101,8 @@ El agente compite contra 4 niveles de ninjas pre-entrenados. Resultados obtenido
 |-------|-----------|
 | ninja1 | ✅ Victoria |
 | ninja2 | ✅ Victoria |
-| ninja3 | 🔄 En progreso |
-| ninja4 | 🔄 En progreso |
+| ninja3 | ✅ Victoria |
+| ninja4 | ✅ Victoria |
 
 ---
 
